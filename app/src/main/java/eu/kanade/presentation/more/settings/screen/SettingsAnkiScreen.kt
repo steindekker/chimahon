@@ -17,5 +17,5 @@ object SettingsAnkiScreen : SearchableSettings {
 
     @Composable
     override fun getPreferences(): List<Preference> =
-        SettingsDictionaryScreen.ankiPreferences()
+        SettingsDictionaryScreen.ankiPreferences() + hoshiCardDataGroup()
 }

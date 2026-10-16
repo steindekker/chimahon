@@ -1820,4 +1820,22 @@
     <string name="extensionRepo_settings">Extension repo</string>
     <string name="pref_disable_long_press_screenshot">Disable long-press screenshot</string>
     <string name="pref_single_tap_to_pause">Single tap to pause</string>
+
+    <!-- Hoshi card data (hoshi-card enrichment pack and sentence model) -->
+    <string name="pref_hoshi_card_data">Hoshi card data</string>
+    <string name="pref_hoshi_card_data_summary">Definitions, pitch graphs, frequency ranks, example sentences and sentence pitch for the Hoshi note type, the same data Hoshi Reader uses. Without it, Hoshi cards take these fields from your dictionaries and use the plain sentence.</string>
+    <string name="pref_hoshi_card_data_download">Download Hoshi card data</string>
+    <string name="pref_hoshi_card_data_update">Update Hoshi card data</string>
+    <string name="pref_hoshi_card_data_unavailable">Not available in this build: it has no setup server configured.</string>
+    <string name="pref_hoshi_card_data_pack_installed">Enrichment pack: %1$s entries, built %2$s</string>
+    <string name="pref_hoshi_card_data_pack_missing">Enrichment pack: not installed</string>
+    <string name="pref_hoshi_card_data_sentence_installed">Sentence pitch model: installed</string>
+    <string name="pref_hoshi_card_data_sentence_missing">Sentence pitch model: not installed</string>
+    <string name="pref_hoshi_card_data_reading_catalog">Reading the catalog…</string>
+    <string name="pref_hoshi_card_data_downloading_sentence">Downloading the sentence pitch model… %1$d%%</string>
+    <string name="pref_hoshi_card_data_downloading_pack">Downloading the enrichment pack… %1$d%%</string>
+    <string name="pref_hoshi_card_data_done">Hoshi card data is up to date</string>
+    <string name="pref_hoshi_card_data_error_unreachable">Could not reach the setup server. Check the connection and try again.</string>
+    <string name="pref_hoshi_card_data_error_damaged">A download was damaged. Try again.</string>
+    <string name="pref_hoshi_card_data_error_format">This version cannot read the server\'s data. Update the app.</string>
 </resources>
