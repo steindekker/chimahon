@@ -5,12 +5,35 @@ plugins {
     kotlin("plugin.serialization")
 }
 
+// Setup server for the Hoshi card data (enrichment pack and sentence model), kept out of the
+// repository like Hoshi Reader's: HOSHI_SETUP_URL and HOSHI_SETUP_TOKEN from the environment, else
+// ~/.config/hoshi-reader/setup-url and setup-token. Without a URL the download is unavailable.
+fun hoshiLocalConfig(name: String): String? = providers.fileContents(
+    objects.fileProperty().apply {
+        set(File(System.getProperty("user.home"), ".config/hoshi-reader/$name"))
+    },
+).asText.orNull?.trim()?.takeIf { it.isNotBlank() }
+val hoshiSetupUrl = providers.environmentVariable("HOSHI_SETUP_URL").orNull?.trim()?.takeIf { it.isNotBlank() }
+    ?: hoshiLocalConfig("setup-url").orEmpty()
+require(hoshiSetupUrl.isEmpty() || hoshiSetupUrl.startsWith("https://")) { "HOSHI_SETUP_URL must be https." }
+val hoshiSetupToken = providers.environmentVariable("HOSHI_SETUP_TOKEN").orNull?.trim()?.takeIf { it.isNotBlank() }
+    ?: hoshiLocalConfig("setup-token").orEmpty()
+require(hoshiSetupToken.all { it.isLetterOrDigit() || it == '-' || it == '_' }) {
+    "HOSHI_SETUP_TOKEN may only contain letters, digits, '-' and '_'."
+}
+
 android {
     namespace = "mihon.chimahon"
     ndkVersion = "29.0.14206865"
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         consumerProguardFiles("consumer-rules.pro")
+        buildConfigField("String", "HOSHI_SETUP_URL", "\"$hoshiSetupUrl\"")
+        buildConfigField("String", "HOSHI_SETUP_TOKEN", "\"$hoshiSetupToken\"")
 
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
@@ -64,6 +87,9 @@ dependencies {
     // Dependency injection
     implementation(libs.injekt)
     
+    // Hoshi note type and card enrichment, shared with Hoshi Reader
+    api(projects.hoshiCard)
+
     // Mihon core
     implementation(projects.core.common)
     implementation(libs.unifile)

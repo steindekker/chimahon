@@ -43,6 +43,11 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 rootProject.name = "Komikku"
 include(":chimahon")
 project(":chimahon").projectDir = file("chimahon")
+// hoshi-card (Hoshi note type and card enrichment, shared with Hoshi Reader): a sibling checkout
+// next to this repository when there is one, else the third_party/hoshi-card submodule.
+include(":hoshi-card")
+project(":hoshi-card").projectDir = file("../hoshi-card").takeIf { file("../hoshi-card/build.gradle.kts").exists() }
+    ?: file("third_party/hoshi-card")
 include(":app")
 include(":core-metadata")
 include(":core:archive")

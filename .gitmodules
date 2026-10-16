@@ -2,3 +2,6 @@
 	path = chimahon/src/main/cpp/hoshidicts
 	url = https://github.com/Chimahon/hoshidicts
 	branch = main
+[submodule "third_party/hoshi-card"]
+	path = third_party/hoshi-card
+	url = https://github.com/steindekker/hoshi-card.git
