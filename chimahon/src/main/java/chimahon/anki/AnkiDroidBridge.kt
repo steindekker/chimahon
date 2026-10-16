@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.FileProvider
+import hoshi.card.notetype.HoshiNoteType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -197,6 +198,16 @@ class AnkiDroidBridge(private val context: Context) : AnkiCardBridge {
             createLapisModel(LapisPreset.MODEL_NAME)
             LapisPreset.MODEL_NAME
         }
+    }
+
+    /** Creates the Hoshi note type (hoshi-card's design) when the collection has none. */
+    suspend fun ensureHoshiModelName(): String = withContext(Dispatchers.IO) {
+        if (!hasPermission()) return@withContext ""
+        if (readModelInfos().none { it.name == HoshiPreset.MODEL_NAME }) {
+            val spec = HoshiNoteType.spec(context)
+            createModel(spec.name, spec.fields, spec.cardName, spec.front, spec.back, spec.css, HoshiPreset.DEFAULT_DECK_NAME)
+        }
+        HoshiPreset.MODEL_NAME
     }
 
     override suspend fun getDeckId(deckName: String): Long = withContext(Dispatchers.IO) {
@@ -503,15 +514,30 @@ class AnkiDroidBridge(private val context: Context) : AnkiCardBridge {
         return models
     }
 
-    private fun createLapisModel(modelName: String): Long {
-        val css = readLapisAsset("styling.css")
-        val front = readLapisAsset("front.html")
-        val back = readLapisAsset("back.html")
-        val deckId = findDeckIdOrNull(LapisPreset.DEFAULT_DECK_NAME)
+    private fun createLapisModel(modelName: String): Long = createModel(
+        modelName = modelName,
+        fields = LapisPreset.fields,
+        cardName = "Card 1",
+        front = readLapisAsset("front.html"),
+        back = readLapisAsset("back.html"),
+        css = readLapisAsset("styling.css"),
+        deckName = LapisPreset.DEFAULT_DECK_NAME,
+    )
+
+    private fun createModel(
+        modelName: String,
+        fields: List<String>,
+        cardName: String,
+        front: String,
+        back: String,
+        css: String,
+        deckName: String,
+    ): Long {
+        val deckId = findDeckIdOrNull(deckName)
 
         val modelValues = ContentValues().apply {
             put(MODEL_NAME, modelName)
-            put(MODEL_FIELD_NAMES, LapisPreset.fields.joinToString(FIELD_SEPARATOR))
+            put(MODEL_FIELD_NAMES, fields.joinToString(FIELD_SEPARATOR))
             put(MODEL_NUM_CARDS, 1)
             put(MODEL_CSS, css)
             put(MODEL_SORT_FIELD_INDEX, 0)
@@ -526,7 +552,7 @@ class AnkiDroidBridge(private val context: Context) : AnkiCardBridge {
         val templatesUri = Uri.withAppendedPath(modelUri, "templates")
         val firstTemplateUri = Uri.withAppendedPath(templatesUri, "0")
         val templateValues = ContentValues().apply {
-            put(CARD_TEMPLATE_NAME, "Card 1")
+            put(CARD_TEMPLATE_NAME, cardName)
             put(CARD_TEMPLATE_QUESTION_FORMAT, front)
             put(CARD_TEMPLATE_ANSWER_FORMAT, back)
         }

@@ -84,6 +84,7 @@ import chimahon.anki.AnkiCardCreator
 import chimahon.anki.AnkiDroidBridge
 import chimahon.anki.AnkiProfile
 import chimahon.anki.AnkiScreenshotMode
+import chimahon.anki.HoshiPreset
 import chimahon.anki.LapisPreset
 import chimahon.anki.Marker
 import chimahon.dictionary.readDictionaryIndex
@@ -209,6 +210,7 @@ private val markerSections = listOf(
             Marker.GLOSSARY_FIRST,
             Marker.GLOSSARY_FIRST_NO_DICT,
             Marker.GLOSSARY_FIRST_BRIEF,
+            Marker.GLOSSARY_FIRST_DICTIONARY,
             Marker.SELECTED_GLOSSARY,
             Marker.SELECTED_GLOSSARY_NO_FALLBACK,
             Marker.SINGLE_GLOSSARY,
@@ -241,6 +243,7 @@ private val markerSections = listOf(
         ),
     ),
     MarkerSection("Frequency", listOf(Marker.FREQUENCIES, Marker.FREQUENCY_LOWEST, Marker.FREQUENCY_HARMONIC_RANK, Marker.FREQUENCY_AVERAGE_RANK)),
+    MarkerSection("Hoshi card", HoshiPreset.markers),
     MarkerSection("Media", listOf(Marker.WORD_AUDIO, Marker.AUDIO, Marker.SCREENSHOT, Marker.SENTENCE_AUDIO)),
     MarkerSection(
         "Context",
@@ -277,6 +280,7 @@ private val markerDisplayLabels: Map<String, String> = Marker.ALL_WITH_TODO.asso
         Marker.GLOSSARY_FIRST -> "${prefix}Glossary First"
         Marker.GLOSSARY_FIRST_NO_DICT -> "${prefix}Glossary First No Dict"
         Marker.GLOSSARY_FIRST_BRIEF -> "${prefix}Glossary First Brief"
+        Marker.GLOSSARY_FIRST_DICTIONARY -> "${prefix}Glossary First Dictionary"
         Marker.SENTENCE -> "${prefix}Sentence"
         Marker.SENTENCE_BOLD -> "${prefix}Sentence Bold"
         Marker.CLOZE_PREFIX -> "${prefix}Cloze Prefix"
@@ -308,7 +312,7 @@ private val markerDisplayLabels: Map<String, String> = Marker.ALL_WITH_TODO.asso
         Marker.POPUP_SELECTION_TEXT -> "${prefix}Popup Selection"
         Marker.SELECTED_GLOSSARY -> "${prefix}Selected Glossary"
         Marker.SELECTED_GLOSSARY_NO_FALLBACK -> "${prefix}Selected Glossary No Fallback"
-        else -> marker
+        else -> HoshiPreset.markerLabels[marker] ?: marker
     }
 }
 
@@ -1875,6 +1879,12 @@ object SettingsDictionaryScreen : SearchableSettings {
                     }
                     // Always ensure Lapis exists in AnkiDroid so it's in the dropdown
                     bridge.ensureLapisModelName()
+                    // The Hoshi note type (shared with Hoshi Reader) is offered the same way.
+                    try {
+                        bridge.ensureHoshiModelName()
+                    } catch (e: Exception) {
+                        Log.w("AnkiSettings", "Failed to ensure the Hoshi note type", e)
+                    }
                     val ensuredModel = if (selectedModel.isBlank()) {
                         LapisPreset.MODEL_NAME
                     } else {
@@ -1894,6 +1904,9 @@ object SettingsDictionaryScreen : SearchableSettings {
                     }
                     if (LapisPreset.isBundledModelName(updated.ankiModel) && LapisPreset.isBlankFieldMap(updated.ankiFieldMap)) {
                         updated = updated.copy(ankiFieldMap = LapisPreset.defaultFieldMapJson)
+                    }
+                    if (HoshiPreset.isHoshiModel(updated.ankiModel) && LapisPreset.isBlankFieldMap(updated.ankiFieldMap)) {
+                        updated = updated.copy(ankiFieldMap = HoshiPreset.defaultFieldMapJson)
                     }
                     if (updated != current) {
                         profileStore.updateProfile(updated)
@@ -1917,7 +1930,9 @@ object SettingsDictionaryScreen : SearchableSettings {
 
                 // Only auto-map if field map is empty (first-time setup or model switch).
                 if (fieldMapJson.isBlank() || fieldMapJson == "{}") {
-                    val detectedMap = if (LapisPreset.isLapisLikeModel(selectedModel, modelFields)) {
+                    val detectedMap = if (HoshiPreset.isHoshiModel(selectedModel)) {
+                        HoshiPreset.defaultFieldMapFor(modelFields)
+                    } else if (LapisPreset.isLapisLikeModel(selectedModel, modelFields)) {
                         LapisPreset.defaultFieldMapFor(modelFields)
                     } else {
                         modelFields.mapIndexedNotNull { index, fieldName ->
@@ -2041,7 +2056,13 @@ object SettingsDictionaryScreen : SearchableSettings {
                             title = stringResource(MR.strings.pref_anki_model),
                             onValueChanged = { newModel ->
                                 if (newModel != selectedModel) {
-                                    updateProfile { copy(ankiModel = newModel, ankiFieldMap = "{}") }
+                                    updateProfile {
+                                        copy(
+                                            ankiModel = newModel,
+                                            ankiFieldMap = "{}",
+                                            ankiTags = if (HoshiPreset.isHoshiModel(newModel)) HoshiPreset.tagsFor(ankiTags) else ankiTags,
+                                        )
+                                    }
                                 }
                             },
                         ),

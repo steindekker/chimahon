@@ -11,6 +11,9 @@ import chimahon.MediaInfo
 import chimahon.PitchEntry
 import chimahon.audio.WordAudioResult
 import chimahon.audio.WordAudioService
+import chimahon.hoshi.HoshiCardData
+import hoshi.card.CardEnricher
+import hoshi.card.HoshiCardFields
 import eu.kanade.tachiyomi.network.NetworkHelper
 import okhttp3.Request
 import org.json.JSONArray
@@ -63,6 +66,7 @@ object Marker {
     const val GLOSSARY_FIRST = "glossary-first"
     const val GLOSSARY_FIRST_NO_DICT = "glossary-first-no-dictionary"
     const val GLOSSARY_FIRST_BRIEF = "glossary-first-brief"
+    const val GLOSSARY_FIRST_DICTIONARY = "glossary-first-dictionary"
     const val SENTENCE = "sentence"
     const val SENTENCE_BOLD = "sentence-bold"
     const val CLOZE_PREFIX = "cloze-prefix"
@@ -115,7 +119,7 @@ object Marker {
 
         // Glossary variants
         GLOSSARY_BRIEF, GLOSSARY_PLAIN, GLOSSARY_PLAIN_NO_DICT, GLOSSARY_NO_DICT,
-        GLOSSARY_FIRST, GLOSSARY_FIRST_NO_DICT, GLOSSARY_FIRST_BRIEF,
+        GLOSSARY_FIRST, GLOSSARY_FIRST_NO_DICT, GLOSSARY_FIRST_BRIEF, GLOSSARY_FIRST_DICTIONARY,
 
         // Sentence/Cloze
         SENTENCE_BOLD, CLOZE_PREFIX, CLOZE_BODY, CLOZE_BODY_KANA, CLOZE_SUFFIX,
@@ -136,7 +140,7 @@ object Marker {
 
         // Other
         SENTENCE_AUDIO, POPUP_SELECTION_TEXT,
-    )
+    ) + HoshiCardFields.All // hoshi-card fields, filled by HoshiCardRender
 
     val ALL_WITH_TODO: List<String> = ALL
 
@@ -224,6 +228,8 @@ object AnkiCardCreator {
     internal var bridgeFactory: (Context) -> AnkiCardBridge = ::AnkiDroidBridge
     @Volatile
     internal var fieldMapParser: (String) -> Map<String, String> = ::parseFieldMap
+    @Volatile
+    internal var cardEnricherProvider: () -> CardEnricher = HoshiCardData::currentEnricher
 
     internal fun resetBridgeFactoryForTests() {
         bridgeFactory = ::AnkiDroidBridge
@@ -231,6 +237,10 @@ object AnkiCardCreator {
 
     internal fun resetFieldMapParserForTests() {
         fieldMapParser = ::parseFieldMap
+    }
+
+    internal fun resetCardEnricherProviderForTests() {
+        cardEnricherProvider = HoshiCardData::currentEnricher
     }
 
     private data class DictionaryMediaReference(
@@ -303,6 +313,7 @@ object AnkiCardCreator {
             } else {
                 model
             }
+            val hoshiModel = HoshiPreset.isHoshiModel(effectiveModel)
             val effectiveFieldMapJson = if (
                 LapisPreset.isBundledModelName(effectiveModel) &&
                 LapisPreset.isBlankFieldMap(fieldMapJson)
@@ -317,8 +328,16 @@ object AnkiCardCreator {
                 return AnkiResult.NotConfigured
             }
 
-            val fieldMap = fieldMapParser(effectiveFieldMapJson)
-            val cloze = if (sentence.isNotEmpty() && offset >= 0) {
+            val fieldMap = if (hoshiModel && LapisPreset.isBlankFieldMap(effectiveFieldMapJson)) {
+                HoshiPreset.defaultFieldMap
+            } else {
+                fieldMapParser(effectiveFieldMapJson)
+            }
+            val cloze = if (hoshiModel) {
+                // The Hoshi note type splits the sentence exactly as Hoshi Reader does.
+                val boldTarget = selection?.takeIf { it.isNotEmpty() } ?: result.matched
+                HoshiCardRendering.cloze(sentence, offset, boldTarget, result.term.expression, result.term.reading)
+            } else if (sentence.isNotEmpty() && offset >= 0) {
                 // Use result.matched (the exact surface form the dictionary engine consumed)
                 // so the bold window is precisely the word that was looked up, not the base form.
                 // If the caller provided a manual selection override, use that instead.
@@ -372,10 +391,21 @@ object AnkiCardCreator {
                 else -> null
             }
             val exportMedia = ExportMediaContext()
+            val hoshiRender = withContext(Dispatchers.IO) {
+                HoshiCardRendering.prepare(
+                    enricher = cardEnricherProvider,
+                    expression = result.term.expression,
+                    reading = result.term.reading,
+                    sentence = sentence,
+                    templates = fieldMap.values + tags,
+                    hoshiModel = hoshiModel,
+                    cloze = cloze,
+                )
+            }
             val fieldsWithPlaceholders = withContext(Dispatchers.Default) {
                 buildFields(
                     result,
-                    fieldMap,
+                    fieldMap.mapValues { (_, template) -> hoshiRender.protect(template) },
                     cloze,
                     media,
                     SCREENSHOT_MEDIA_PLACEHOLDER.takeIf { hasScreenshotMarker },
@@ -386,7 +416,7 @@ object AnkiCardCreator {
                     glossaryIndex,
                     styles,
                     exportMedia,
-                )
+                ).mapValues { (_, value) -> hoshiRender.fill(value) }
             }
             val tagsWithPlaceholders = withContext(Dispatchers.Default) {
                 // Split configured tags before rendering markers so commas from a
@@ -394,7 +424,7 @@ object AnkiCardCreator {
                 tags.split(",")
                     .map { template ->
                         formatField(
-                            template,
+                            hoshiRender.protect(template),
                             result,
                             cloze,
                             media,
@@ -405,7 +435,7 @@ object AnkiCardCreator {
                             popupSelection,
                             glossaryIndex,
                             styles, exportMedia,
-                        )
+                        ).let(hoshiRender::fill)
                     }
             }
             val preparedMedia = PreparedAnkiCardMedia(
@@ -779,7 +809,7 @@ object AnkiCardCreator {
         )
     }
 
-    private fun calculateBodyKana(expression: String, reading: String): String {
+    internal fun calculateBodyKana(expression: String, reading: String): String {
         if (reading.isEmpty()) return expression
         if (expression == reading) return expression
 
@@ -860,6 +890,10 @@ object AnkiCardCreator {
             styles = styles,
             exportMedia = exportMedia,
         )
+        // The dictionary of the glossary {glossary-first} renders.
+        Marker.GLOSSARY_FIRST_DICTIONARY ->
+            (glossaryIndex?.let { result.term.glossaries.getOrNull(it) } ?: result.term.glossaries.firstOrNull())
+                ?.let { escapeHtml(it.dictName) } ?: ""
         Marker.GLOSSARY_PLAIN -> buildGlossaryPlain(
             if (glossaryIndex != null && glossaryIndex >= 0) arrayOf(result.term.glossaries.getOrElse(glossaryIndex) { result.term.glossaries.first() }) else result.term.glossaries,
             noDictTag = false,
