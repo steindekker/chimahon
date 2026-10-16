@@ -333,6 +333,7 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { eu.kanade.tachiyomi.data.backup.restore.restorers.NovelExtensionRepoRestorer() }
         addSingletonFactory<WordAudioPreferences> { get<DictionaryPreferences>() }
         addSingletonFactory { WordAudioService(app) }
+        addSingletonFactory { chimahon.hoshi.HoshiCardData(app) }
 
         addSingletonFactory { LensClient() }
         addSingletonFactory { LocalOcrBridge(app) }
