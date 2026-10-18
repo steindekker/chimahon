@@ -3,6 +3,7 @@ import mihon.buildlogic.Config
 import mihon.buildlogic.getBuildTime
 import mihon.buildlogic.getCommitCount
 import mihon.buildlogic.getGitSha
+import mihon.buildlogic.getLatestReleaseVersion
 
 plugins {
     id("mihon.android.application")
@@ -15,8 +16,12 @@ plugins {
 
 val enableUpdater = Config.enableUpdater
 val hasLocalOcr = file("../chimahon-local-ocr/build.gradle.kts").exists()
-val releaseVersionName = providers.gradleProperty("releaseVersionName").orNull
+// Without CI's release properties, use the latest release tag, encoded like release.yml does.
+val releaseVersionName = providers.gradleProperty("releaseVersionName").orNull ?: getLatestReleaseVersion()
 val releaseVersionCode = providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull()
+    ?: releaseVersionName?.split(".")?.map(String::toInt)?.let { (major, minor, patch) ->
+        major * 10000 + minor * 100 + patch
+    }
 
 android {
     namespace = "eu.kanade.tachiyomi"
@@ -80,7 +85,6 @@ android {
 
             applicationIdSuffix = ".beta"
 
-            versionNameSuffix = debug.versionNameSuffix
             signingConfig = debug.signingConfig
 
             matchingFallbacks.addAll(commonMatchingFallbacks)

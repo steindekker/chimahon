@@ -18,6 +18,17 @@ fun Project.getGitSha(): String {
     // return "1"
 }
 
+/**
+ * The version of the latest `vX.Y.Z` release tag reachable from HEAD, e.g. "2.4.7",
+ * or null when there is none (such as in a shallow clone).
+ */
+fun Project.getLatestReleaseVersion(): String? {
+    return runCatching { runCommand("git describe --tags --abbrev=0 --match v[0-9]*.[0-9]*.[0-9]*") }
+        .getOrNull()
+        ?.removePrefix("v")
+        ?.takeIf { it.matches(Regex("""\d+\.\d+\.\d+""")) }
+}
+
 private val BUILD_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
 
 /**
